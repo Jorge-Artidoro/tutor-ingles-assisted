@@ -105,10 +105,13 @@ with col_hero_left:
                           "Workplace (Professional)", 
                           "Intercultural (Global)"])
     
-    if st.button("START MISSION"):
+if st.button("START MISSION"):
         st.session_state.messages = []
         st.session_state.score = 0
-        st.success("Scenario Loaded. Initializing Voice System...")
+        # Añadimos un mensaje inicial automático de la IA
+        initial_prompt = f"I am your tutor for the {program}. Please tell me, what is your initial position on this conflict?"
+        st.session_state.messages.append({"role": "assistant", "content": initial_prompt})
+        st.rerun()
 
 with col_hero_right:
     # ELEMENTO DINÁMICO: Waveform Neón
