@@ -1,41 +1,37 @@
 import streamlit as st
 from openai import OpenAI
 
-# Configuración estética
+# 1. Configuración de la interfaz
 st.set_page_config(page_title="Tutor de Inglés Socrático", page_icon="🎓")
 st.title("🎓 English Socratic Tutor")
 st.markdown("---")
 
-# Conexión con Gemini usando su interfaz compatible
-# Nota: st.secrets["GEMINI_API_KEY"] lee la clave que pusiste recién
+# 2. Conexión con Gemini (Usando la clave que pegaste en Secrets)
 client = OpenAI(
     api_key=st.secrets["GEMINI_API_KEY"],
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
-# Inicializar el historial del chat
+# 3. Inicializar el historial del chat
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {
-            "role": "system", 
-            "content": "Eres un tutor de inglés socrático experto. Tu objetivo es ayudar al estudiante a mejorar su inglés sin darle las respuestas directamente. Haz preguntas que lo inviten a reflexionar sobre su gramática o vocabulario. Mantén un tono doctoral y motivador."
-        }
+        {"role": "system", "content": "Eres un tutor de inglés socrático experto. Ayuda al estudiante con preguntas guía, no des respuestas directas. Usa un tono doctoral y motivador."}
     ]
 
-# Mostrar los mensajes del chat
+# 4. Mostrar los mensajes previos
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# Lógica de interacción
-if prompt := st.chat_input("How can I help you with your English today?"):
+# 5. Lógica del Chat
+if prompt := st.chat_input("How can I help you today?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Usamos el modelo flash que es el más rápido y gratuito
+        # Usamos el modelo gratuito de Gemini
         response = client.chat.completions.create(
             model="gemini-1.5-flash",
             messages=st.session_state.messages
