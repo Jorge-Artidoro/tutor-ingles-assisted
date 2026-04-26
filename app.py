@@ -101,6 +101,24 @@ st.markdown("""
         font-size: 1.1rem;
         line-height: 1.6;
     }
+    
+    /* Caja de retroalimentación motivadora */
+    .feedback-box {
+        background: rgba(212, 255, 72, 0.1);
+        border-left: 4px solid #D4FF48;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+        color: #D4FF48;
+        font-weight: bold;
+        font-size: 0.95rem;
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -149,6 +167,20 @@ SCENARIOS = {
         }
     ]
 }
+
+# Lista de retroalimentación motivadora
+MOTIVATIONAL_FEEDBACK = [
+    "🎯 Great start! Your response shows clear thinking. Now, what challenges might arise with this approach?",
+    "💡 Excellent! You're considering multiple perspectives. How would you handle potential resistance?",
+    "🚀 Impressive effort! You're on the right track. What would be your backup plan?",
+    "✨ Well articulated! I like how you framed that. What assumptions are you making?",
+    "🌟 Strong reasoning! You're thinking strategically. How would this impact all stakeholders?",
+    "👏 Solid approach! You're demonstrating good negotiation skills. What could go wrong?",
+    "🎪 Creative solution! I appreciate the originality. How would you measure success?",
+    "⚡ Dynamic response! You're engaging well. What would the other party think?",
+    "🏆 Commendable effort! You're developing strong communication skills. What else should you consider?",
+    "💪 Powerful argument! You're making progress. How would you adapt if things change?"
+]
 
 # --- INICIALIZACIÓN DE ESTADO DE SESIÓN ---
 if "messages" not in st.session_state:
@@ -201,6 +233,10 @@ def start_mission(program):
     st.session_state.current_scenario = generate_random_scenario(program)
     st.session_state.messages = []
     st.session_state.score = 0
+
+def get_random_feedback():
+    """Retorna un mensaje motivador aleatorio"""
+    return random.choice(MOTIVATIONAL_FEEDBACK)
 
 # --- INTERFAZ SUPERIOR (NAVBAR) ---
 col_nav1, col_nav2 = st.columns([8, 2])
@@ -292,7 +328,7 @@ else:
     
     # --- ÁREA DE CHAT (NEGOCIACIÓN SOCRÁTICA) ---
     client = OpenAI(
-        api_key=st.secrets["GEMINI_API_KEY"],
+        api_key=st.secrets["GOOGLE_API_KEY"],
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
     )
 
@@ -327,16 +363,25 @@ Your role:
 
 Remember: Your goal is Socratic dialogue, not instruction."""
 
-            response = client.chat.completions.create(
-                model="gemini-1.5-flash",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    *st.session_state.messages
-                ]
-            )
-            full_response = response.choices[0].message.content
-            st.markdown(f'<span style="color: #ffffff;">{full_response}</span>', unsafe_allow_html=True)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            try:
+                response = client.chat.completions.create(
+                    model="gemini-1.5-flash",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        *st.session_state.messages
+                    ]
+                )
+                full_response = response.choices[0].message.content
+                st.markdown(f'<span style="color: #ffffff;">{full_response}</span>', unsafe_allow_html=True)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+                # Mostrar retroalimentación motivadora
+                feedback = get_random_feedback()
+                st.markdown(f'<div class="feedback-box">{feedback}</div>', unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"⚠️ API Error: Please check your GOOGLE_API_KEY in Streamlit secrets")
+                st.info("Make sure you have set up your Google AI API key correctly in Settings → Secrets")
         
         st.rerun()
     
