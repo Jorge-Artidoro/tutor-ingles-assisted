@@ -6,16 +6,13 @@ import random
 # --- CONFIGURACIÓN DE MARCA Y ESTILO (FINTECH DARK) ---
 st.set_page_config(page_title="English Negotiator | AI Lab", layout="wide")
 
-# Inyección de CSS para estética Dark Mode + Neon Lime
 st.markdown("""
     <style>
-    /* Fondo y tipografía general */
     .stApp {
         background: radial-gradient(circle, #1a1a1a 0%, #050505 100%);
         color: #ffffff;
     }
-    
-    /* Botones estilo Pill y Neón */
+
     .stButton>button {
         border-radius: 50px;
         background-color: #D4FF48 !important;
@@ -31,7 +28,6 @@ st.markdown("""
         transform: scale(1.02);
     }
 
-    /* Tarjetas de Dashboard */
     .metric-card {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -41,7 +37,6 @@ st.markdown("""
         backdrop-filter: blur(10px);
     }
 
-    /* Waveform Simulado (Animación) */
     .waveform-container {
         display: flex;
         align-items: center;
@@ -59,27 +54,24 @@ st.markdown("""
         0%, 100% { height: 20px; }
         50% { height: 80px; }
     }
-    
-    /* Mensajes del Chat - Texto BLANCO para IA */
+
     .stChatMessage [data-testid="chatAvatarIcon-assistant"] ~ div [data-testid="stMarkdownContainer"] {
         color: #ffffff !important;
     }
-    
+
     .stChatMessage [data-testid="chatAvatarIcon-assistant"] ~ div {
         color: #ffffff !important;
     }
-    
+
     div[data-testid="stChatMessageContent"] {
         color: #ffffff !important;
     }
-    
-    /* Contenedor de chat con fondo oscuro */
+
     .stChatMessage {
         background: rgba(255, 255, 255, 0.02);
         border-radius: 10px;
     }
-    
-    /* Badge de programa activo */
+
     .program-badge {
         background: #D4FF48;
         color: #000000;
@@ -89,8 +81,7 @@ st.markdown("""
         display: inline-block;
         margin-bottom: 20px;
     }
-    
-    /* Escenario en caja */
+
     .scenario-box {
         background: rgba(212, 255, 72, 0.05);
         border: 2px solid rgba(212, 255, 72, 0.3);
@@ -101,8 +92,7 @@ st.markdown("""
         font-size: 1.1rem;
         line-height: 1.6;
     }
-    
-    /* Caja de retroalimentación motivadora */
+
     .feedback-box {
         background: rgba(212, 255, 72, 0.1);
         border-left: 4px solid #D4FF48;
@@ -114,15 +104,51 @@ st.markdown("""
         font-size: 0.95rem;
         animation: fadeIn 0.5s ease-in;
     }
-    
+
+    .competency-report {
+        background: rgba(212, 255, 72, 0.08);
+        border: 1px solid rgba(212, 255, 72, 0.3);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+
+    .competency-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(212, 255, 72, 0.1);
+    }
+
+    .competency-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        margin: 5px 0;
+        overflow: hidden;
+    }
+
+    .competency-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #D4FF48, #a8cc24);
+        transition: width 0.3s ease;
+    }
+
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(-10px); }
         to { opacity: 1; transform: translateY(0); }
     }
+
+    .sidebar-button {
+        width: 100%;
+        margin: 5px 0;
+        text-align: left;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DICCIONARIO DE ESCENARIOS POR PROGRAMA ---
+# --- ESCENARIOS EXPANDIDOS (6 por programa) ---
 SCENARIOS = {
     "Campus Life (Foundation)": [
         {
@@ -136,6 +162,18 @@ SCENARIOS = {
         {
             "title": "Misunderstanding with Classmate",
             "scenario": "A classmate misunderstood something you said in group chat and thinks you were disrespectful. They've posted about it publicly. How do you handle this communication crisis?"
+        },
+        {
+            "title": "Scheduling Conflict - Group Project",
+            "scenario": "Your group needs to meet for a project, but everyone has different schedules. Some prefer morning, others evening. People are getting frustrated. How do you find a solution that works for everyone?"
+        },
+        {
+            "title": "Library Noise Dispute",
+            "scenario": "A student next to you at the library is talking loudly on the phone, disrupting your study. You've tried ignoring it, but it's getting worse. How do you address this politely but firmly?"
+        },
+        {
+            "title": "Grade Appeal Discussion",
+            "scenario": "You believe your exam was graded unfairly. Your professor seems dismissive initially. How do you present your case respectfully and persuasively?"
         }
     ],
     "Workplace (Professional)": [
@@ -150,6 +188,18 @@ SCENARIOS = {
         {
             "title": "Salary Review Discussion",
             "scenario": "During your performance review, you were told there's 'no budget' for salary increases this year, despite exceeding all targets. How do you address compensation fairly without threatening your position?"
+        },
+        {
+            "title": "Remote Work Policy Change",
+            "scenario": "Your company is mandating return to office 5 days a week, but remote work dramatically improved your productivity. Your team is upset. How do you advocate for a hybrid model?"
+        },
+        {
+            "title": "Unrealistic Project Scope",
+            "scenario": "A client has increased the project scope by 40% without adjusting timeline or budget. Your team is overwhelmed. How do you renegotiate without losing the client?"
+        },
+        {
+            "title": "Colleague Credit Dispute",
+            "scenario": "A colleague presented your ideas in a meeting and got credit for them. The manager now thinks those ideas were theirs. How do you address this professionally?"
         }
     ],
     "Intercultural (Global)": [
@@ -164,29 +214,56 @@ SCENARIOS = {
         {
             "title": "Communication Style Conflict",
             "scenario": "Your Indian team prefers indirect, context-rich communication, while your UK team wants direct, concise messages. This is causing friction. How do you align communication without dismissing either culture?"
+        },
+        {
+            "title": "Religious Holiday Scheduling",
+            "scenario": "A Muslim team member requested a day off for Eid, but it conflicts with a critical deadline. Other team members are frustrated about coverage. How do you handle this with cultural sensitivity?"
+        },
+        {
+            "title": "Hierarchical vs. Flat Culture Clash",
+            "scenario": "Your Japanese team expects decisions from the top, but your company operates on consensus. This is causing decision paralysis. How do you bridge this organizational culture gap?"
+        },
+        {
+            "title": "Language Barrier in Meetings",
+            "scenario": "A non-native English speaker is struggling to keep up in fast-paced meetings and is withdrawing from discussions. Productivity is suffering. How do you create an inclusive environment?"
         }
     ]
 }
 
-# Lista de retroalimentación motivadora
-MOTIVATIONAL_FEEDBACK = [
-    "🎯 Great start! Your response shows clear thinking. Now, what challenges might arise with this approach?",
-    "💡 Excellent! You're considering multiple perspectives. How would you handle potential resistance?",
-    "🚀 Impressive effort! You're on the right track. What would be your backup plan?",
-    "✨ Well articulated! I like how you framed that. What assumptions are you making?",
-    "🌟 Strong reasoning! You're thinking strategically. How would this impact all stakeholders?",
-    "👏 Solid approach! You're demonstrating good negotiation skills. What could go wrong?",
-    "🎪 Creative solution! I appreciate the originality. How would you measure success?",
-    "⚡ Dynamic response! You're engaging well. What would the other party think?",
-    "🏆 Commendable effort! You're developing strong communication skills. What else should you consider?",
-    "💪 Powerful argument! You're making progress. How would you adapt if things change?"
-]
+# --- SISTEMA DE COMPETENCIAS ---
+COMPETENCIES = {
+    "English Language": {
+        "icon": "🇬🇧",
+        "description": "Grammar, vocabulary, fluency, and pronunciation",
+        "indicators": ["uses correct grammar", "varied vocabulary", "clear pronunciation", "speaks fluently"]
+    },
+    "Citizenship": {
+        "icon": "🏛️",
+        "description": "Civic responsibility, ethical reasoning, respect for diversity",
+        "indicators": ["respects others", "considers collective good", "ethical thinking", "inclusive approach"]
+    },
+    "Intercultural": {
+        "icon": "🌍",
+        "description": "Cultural awareness, empathy, adaptability across cultures",
+        "indicators": ["cultural awareness", "shows empathy", "respects differences", "adapts communication"]
+    },
+    "Negotiation": {
+        "icon": "🤝",
+        "description": "Finding win-win solutions, active listening, problem-solving",
+        "indicators": ["asks questions", "listens actively", "proposes solutions", "seeks common ground"]
+    },
+    "Soft Skills": {
+        "icon": "💼",
+        "description": "Communication, emotional intelligence, collaboration, leadership",
+        "indicators": ["clear communication", "emotional control", "collaborative tone", "shows leadership"]
+    }
+}
 
 # --- INICIALIZACIÓN DE ESTADO DE SESIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "score" not in st.session_state:
-    st.session_state.score = 0
+if "competencies" not in st.session_state:
+    st.session_state.competencies = {comp: 0 for comp in COMPETENCIES}
 if "level" not in st.session_state:
     st.session_state.level = "Explorer"
 if "program_selected" not in st.session_state:
@@ -195,29 +272,102 @@ if "mission_started" not in st.session_state:
     st.session_state.mission_started = False
 if "current_scenario" not in st.session_state:
     st.session_state.current_scenario = None
+if "total_score" not in st.session_state:
+    st.session_state.total_score = 0
+if "response_count" not in st.session_state:
+    st.session_state.response_count = 0
 
-# --- LÓGICA DE NEGOCIO Y GAMIFICACIÓN ---
-def update_gamification(text):
-    """Actualiza puntuación basada en calidad de respuesta"""
-    points = 0
-    if "?" in text: 
-        points += 3  # Pregunta relevante
-    if "because" in text or "reason" in text or "since" in text: 
-        points += 2  # Justificación clara
-    if len(text.split()) > 15: 
-        points += 1  # Respuesta elaborada
-    
-    st.session_state.score += points
-    
-    # Actualizar nivel
-    if st.session_state.score > 30: 
+# --- FUNCIONES ---
+def evaluate_competencies(text):
+    """Evalúa el texto del usuario contra las 5 competencias"""
+    scores = {comp: 0 for comp in COMPETENCIES}
+
+    # Análisis simple basado en patrones
+    text_lower = text.lower()
+
+    # English Language
+    if len(text.split()) > 15 and "?" in text:
+        scores["English Language"] = 3
+    elif len(text.split()) > 10:
+        scores["English Language"] = 2
+    else:
+        scores["English Language"] = 1
+
+    # Citizenship (respeto, ética)
+    citizenship_keywords = ["respect", "fair", "everyone", "together", "community", "ethical", "responsibility"]
+    if any(kw in text_lower for kw in citizenship_keywords):
+        scores["Citizenship"] = 3
+
+    # Intercultural (empatía, sensibilidad)
+    intercultural_keywords = ["understand", "perspective", "different", "culture", "appreciate", "empathy"]
+    if any(kw in text_lower for kw in intercultural_keywords):
+        scores["Intercultural"] = 3
+
+    # Negotiation (preguntas, soluciones)
+    negotiation_keywords = ["?" , "solution", "propose", "suggest", "agree", "compromise", "win-win"]
+    negotiation_score = sum(1 for kw in negotiation_keywords if kw in text_lower)
+    scores["Negotiation"] = min(negotiation_score * 2, 5)
+
+    # Soft Skills (comunicación clara, tono positivo)
+    if "I think" in text or "I believe" in text or "I suggest" in text:
+        scores["Soft Skills"] = 3
+    elif "because" in text_lower or "reason" in text_lower:
+        scores["Soft Skills"] = 2
+
+    return scores
+
+def generate_detailed_feedback(competency_scores):
+    """Genera retroalimentación detallada por competencia"""
+    feedback = {}
+
+    for comp, score in competency_scores.items():
+        if score >= 4:
+            level = "🟢 Excellent"
+            message = f"You demonstrated strong {comp.lower()}!"
+            advice = ""
+        elif score >= 2:
+            level = "🟡 Good"
+            message = f"You showed {comp.lower()} skills, but there's room for improvement."
+            advice = f"Tip: Focus on {COMPETENCIES[comp]['description'].lower()}"
+        else:
+            level = "🔴 Developing"
+            message = f"Work on your {comp.lower()} skills."
+            advice = f"Next time: {COMPETENCIES[comp]['indicators'][0]}"
+
+        feedback[comp] = {
+            "level": level,
+            "message": message,
+            "advice": advice,
+            "score": score
+        }
+
+    return feedback
+
+def get_motivational_message(level):
+    """Mensaje motivador según el nivel del usuario"""
+    messages = {
+        "Explorer": "🌟 Great start, Explorer! You're beginning your negotiation journey.",
+        "Negotiator": "💪 Well done, Negotiator! Your skills are growing.",
+        "Strategist": "🎯 Impressive, Strategist! You're thinking strategically.",
+        "Global Communicator": "🌍 Excellent, Global Communicator! You're bridging cultures effectively.",
+        "Master Negotiator": "🏆 Outstanding, Master Negotiator! You're at the top of your game!"
+    }
+    return messages.get(level, "Keep up the great work!")
+
+def update_level():
+    """Actualiza nivel según competencias"""
+    avg_score = sum(st.session_state.competencies.values()) / len(st.session_state.competencies)
+
+    if avg_score >= 4.5:
         st.session_state.level = "Master Negotiator"
-    elif st.session_state.score > 20: 
+    elif avg_score >= 3.8:
         st.session_state.level = "Global Communicator"
-    elif st.session_state.score > 15: 
+    elif avg_score >= 3:
         st.session_state.level = "Strategist"
-    elif st.session_state.score > 10: 
+    elif avg_score >= 2:
         st.session_state.level = "Negotiator"
+    else:
+        st.session_state.level = "Explorer"
 
 def generate_random_scenario(program):
     """Genera un escenario aleatorio para el programa seleccionado"""
@@ -232,11 +382,44 @@ def start_mission(program):
     st.session_state.mission_started = True
     st.session_state.current_scenario = generate_random_scenario(program)
     st.session_state.messages = []
-    st.session_state.score = 0
+    st.session_state.competencies = {comp: 0 for comp in COMPETENCIES}
+    st.session_state.total_score = 0
+    st.session_state.response_count = 0
 
-def get_random_feedback():
-    """Retorna un mensaje motivador aleatorio"""
-    return random.choice(MOTIVATIONAL_FEEDBACK)
+# --- SIDEBAR PERMANENTE (DISPONIBLE SIEMPRE) ---
+with st.sidebar:
+    st.markdown("<h3 style='color:#D4FF48;'>⚙️ NAVIGATION</h3>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    if st.session_state.mission_started:
+        st.markdown(f"**Current Program:** {st.session_state.program_selected}")
+        st.markdown("---")
+
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            if st.button("🔄 New Scenario", key="side_new_scenario"):
+                st.session_state.current_scenario = generate_random_scenario(st.session_state.program_selected)
+                st.session_state.messages = []
+                st.rerun()
+
+        with col_s2:
+            if st.button("← Back to Programs", key="side_back"):
+                st.session_state.mission_started = False
+                st.session_state.program_selected = None
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown("**Quick Stats:**")
+        col_s3, col_s4 = st.columns(2)
+        with col_s3:
+            st.metric("Responses", st.session_state.response_count)
+        with col_s4:
+            st.metric("Level", st.session_state.level)
+    else:
+        st.info("👈 Select a program to start a mission!")
+
+    st.markdown("---")
+    st.markdown("<small style='color:#aaa;'>English Negotiator © 2024</small>", unsafe_allow_html=True)
 
 # --- INTERFAZ SUPERIOR (NAVBAR) ---
 col_nav1, col_nav2 = st.columns([8, 2])
@@ -247,7 +430,6 @@ with col_nav2:
 
 # --- FLUJO CONDICIONAL PRINCIPAL ---
 
-# SECCIÓN 1: SELECCIONAR PROGRAMA (Si no ha iniciado misión)
 if not st.session_state.mission_started:
     col_hero_left, col_hero_right = st.columns([1.2, 1])
 
@@ -259,25 +441,24 @@ if not st.session_state.mission_started:
             Analyze, justify, and resolve intercultural conflicts in real-time.
             </p>
         """, unsafe_allow_html=True)
-        
+
         program = st.selectbox("CHOOSE YOUR PROGRAM:", 
                              ["Campus Life (Foundation)", 
                               "Workplace (Professional)", 
                               "Intercultural (Global)"],
                              key="program_select")
-        
+
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
             if st.button("START MISSION", key="start_mission_btn"):
                 start_mission(program)
                 st.rerun()
-        
+
         with col_btn2:
             if st.button("LEARN MORE", key="learn_more"):
-                st.info("📚 Each program offers unique scenarios tailored to improve your negotiation skills in different contexts.")
+                st.info("📚 Each program offers 6 unique scenarios tailored to improve your negotiation skills in different contexts.")
 
     with col_hero_right:
-        # ELEMENTO DINÁMICO: Waveform Neón
         st.markdown('<div class="waveform-container">' + 
                     '<div class="bar" style="animation-delay: 0.1s"></div>' +
                     '<div class="bar" style="animation-delay: 0.2s"></div>' +
@@ -287,66 +468,63 @@ if not st.session_state.mission_started:
                     '<div class="bar" style="animation-delay: 0.4s"></div>' +
                     '<div class="bar" style="animation-delay: 0.3s"></div>' +
                     '</div>', unsafe_allow_html=True)
-        
-        # DASHBOARD DE PUNTOS
+
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown(f'<div class="metric-card">SCORE<br><h2 style="color:#D4FF48;">{st.session_state.score}</h2></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card">TOTAL SCORE<br><h2 style="color:#D4FF48;">{st.session_state.total_score}</h2></div>', unsafe_allow_html=True)
         with c2:
             st.markdown(f'<div class="metric-card">LEVEL<br><h4 style="color:#D4FF48;">{st.session_state.level}</h4></div>', unsafe_allow_html=True)
 
-# SECCIÓN 2: MISIÓN EN PROGRESO (Si la misión ha iniciado)
 else:
-    # Header de misión activa
-    col_mission1, col_mission2, col_mission3 = st.columns([2, 3, 1])
-    
+    # SECCIÓN 2: MISIÓN EN PROGRESO
+    col_mission1, col_mission2 = st.columns([2, 3])
+
     with col_mission1:
         st.markdown(f'<div class="program-badge">🎯 {st.session_state.program_selected}</div>', unsafe_allow_html=True)
-    
+
     with col_mission2:
         st.markdown(f'<h3 style="color:#D4FF48; margin:0;">{st.session_state.current_scenario["title"]}</h3>', unsafe_allow_html=True)
-    
-    with col_mission3:
-        if st.button("🔄 New Scenario", key="new_scenario"):
-            st.session_state.current_scenario = generate_random_scenario(st.session_state.program_selected)
-            st.session_state.messages = []
-            st.rerun()
-    
-    # Mostrar escenario conflictivo
+
     st.markdown(f'<div class="scenario-box">{st.session_state.current_scenario["scenario"]}</div>', unsafe_allow_html=True)
-    
+
     st.markdown("---")
-    
-    # Dashboard lateral
-    col_dash1, col_dash2 = st.columns(2)
+
+    # Dashboard de competencias
+    col_dash1, col_dash2, col_dash3 = st.columns(3)
     with col_dash1:
-        st.markdown(f'<div class="metric-card">SCORE<br><h2 style="color:#D4FF48;">{st.session_state.score}</h2></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card">RESPONSES<br><h2 style="color:#D4FF48;">{st.session_state.response_count}</h2></div>', unsafe_allow_html=True)
     with col_dash2:
+        st.markdown(f'<div class="metric-card">SCORE<br><h2 style="color:#D4FF48;">{st.session_state.total_score}</h2></div>', unsafe_allow_html=True)
+    with col_dash3:
         st.markdown(f'<div class="metric-card">LEVEL<br><h4 style="color:#D4FF48;">{st.session_state.level}</h4></div>', unsafe_allow_html=True)
-    
+
     st.markdown("---")
-    
+
     # --- ÁREA DE CHAT (NEGOCIACIÓN SOCRÁTICA) ---
     client = OpenAI(
-        api_key=st.secrets["GOOGLE_API_KEY"],
+        api_key=st.secrets.get("GOOGLE_API_KEY", ""),
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
     )
 
-    # Mostrar historial de chat
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Entrada de usuario
     if prompt := st.chat_input("Negotiate here...", key="chat_input"):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
+        st.session_state.response_count += 1
+
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        update_gamification(prompt)
 
-        # Respuesta de IA
+        # Evaluar competencias
+        comp_scores = evaluate_competencies(prompt)
+        for comp, score in comp_scores.items():
+            st.session_state.competencies[comp] = max(st.session_state.competencies[comp], score)
+
+        st.session_state.total_score = sum(st.session_state.competencies.values())
+        update_level()
+
         with st.chat_message("assistant"):
             system_message = f"""You are a Socratic Fintech Tutor specializing in {st.session_state.program_selected}.
 
@@ -374,30 +552,37 @@ Remember: Your goal is Socratic dialogue, not instruction."""
                 full_response = response.choices[0].message.content
                 st.markdown(f'<span style="color: #ffffff;">{full_response}</span>', unsafe_allow_html=True)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-                
-                # Mostrar retroalimentación motivadora
-                feedback = get_random_feedback()
-                st.markdown(f'<div class="feedback-box">{feedback}</div>', unsafe_allow_html=True)
-                
+
             except Exception as e:
                 st.error(f"⚠️ API Error: Please check your GOOGLE_API_KEY in Streamlit secrets")
-                st.info("Make sure you have set up your Google AI API key correctly in Settings → Secrets")
-        
-        st.rerun()
-    
-    # Botón para volver al menú
-    st.markdown("---")
-    if st.button("← Back to Programs", key="back_to_programs"):
-        st.session_state.mission_started = False
-        st.session_state.program_selected = None
-        st.session_state.messages = []
-        st.rerun()
 
-# --- FOOTER / SERVICIOS (Solo si no está en misión) ---
-if not st.session_state.mission_started:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    f1, f2, f3, f4 = st.columns(4)
-    services = [("Transfer", "→"), ("Payment", "→"), ("Online Shopping", "→"), ("Investment", "→")]
-    for col, (name, icon) in zip([f1, f2, f3, f4], services):
-        with col:
-            st.markdown(f"<p style='color:#D4FF48;'>{icon} {name}</p><p style='font-size:0.8rem;'>Learn more</p>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        # RETROALIMENTACIÓN DETALLADA DE COMPETENCIAS
+        st.markdown("<h4 style='color:#D4FF48;'>📊 Competency Analysis</h4>", unsafe_allow_html=True)
+
+        feedback_data = generate_detailed_feedback(comp_scores)
+
+        for comp, feedback in feedback_data.items():
+            with st.container():
+                st.markdown(f"""
+                <div class="competency-report">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>{COMPETENCIES[comp]['icon']} <strong>{comp}</strong></span>
+                        <span>{feedback['level']}</span>
+                    </div>
+                    <div class="competency-bar">
+                        <div class="competency-fill" style="width: {(feedback['score'] / 5) * 100}%"></div>
+                    </div>
+                    <p style="margin: 8px 0; font-size: 0.9rem;">{feedback['message']}</p>
+                    {f'<p style="margin: 5px 0; font-size: 0.85rem; color: #aaa;">💡 {feedback["advice"]}</p>' if feedback['advice'] else ''}
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # MENSAJE MOTIVADOR
+        motivational = get_motivational_message(st.session_state.level)
+        st.markdown(f'<div class="feedback-box">{motivational}</div>', unsafe_allow_html=True)
+
+        st.rerun()
