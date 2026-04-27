@@ -132,63 +132,60 @@ if "last_feedback" not in st.session_state:
 if "last_motivational" not in st.session_state:
     st.session_state.last_motivational = None
 
-def evaluate_competencies(text):
-    scores = {comp: 0 for comp in COMPETENCIES}
-    text_lower = text.lower()
-    words = text.split()
-
-    # English Language
-    if len(words) > 20 and "?" in text:
-        scores["English Language"] = 4
-    elif len(words) > 15:
-        scores["English Language"] = 3
-    elif len(words) > 8:
-        scores["English Language"] = 2
+def parse_ai_response(raw_text):
+    """Split the combined AI response into Socratic reply + JSON feedback."""
+    import json, re
+    socratic = raw_text
+    feedback_json = None
+    # Look for JSON block between ```json ... ``` or just { ... }
+    json_match = re.search(r'```json\s*([\s\S]*?)\s*```', raw_text)
+    if json_match:
+        socratic = raw_text[:json_match.start()].strip()
+        try:
+            feedback_json = json.loads(json_match.group(1))
+        except Exception:
+            feedback_json = None
     else:
-        scores["English Language"] = 1
+        # Try to find a raw JSON object at the end
+        brace_match = re.search(r'(\{[\s\S]*\})\s*$', raw_text)
+        if brace_match:
+            socratic = raw_text[:brace_match.start()].strip()
+            try:
+                feedback_json = json.loads(brace_match.group(1))
+            except Exception:
+                feedback_json = None
+    return socratic, feedback_json
 
-    # Citizenship
-    citizenship_kw = ["respect", "fair", "everyone", "together", "community", "ethical", "responsibility", "inclusive", "rights"]
-    scores["Citizenship"] = min(sum(1 for kw in citizenship_kw if kw in text_lower) * 2, 5)
-
-    # Intercultural
-    intercultural_kw = ["understand", "perspective", "different", "culture", "appreciate", "empathy", "background", "diversity", "aware"]
-    scores["Intercultural"] = min(sum(1 for kw in intercultural_kw if kw in text_lower) * 2, 5)
-
-    # Negotiation
-    negotiation_kw = ["solution", "propose", "suggest", "agree", "compromise", "win-win", "alternative", "option", "resolve", "?"]
-    scores["Negotiation"] = min(sum(1 for kw in negotiation_kw if kw in text_lower) * 1, 5)
-
-    # Soft Skills
-    soft_kw = ["i think", "i believe", "i suggest", "i feel", "i understand", "because", "reason", "therefore", "however"]
-    scores["Soft Skills"] = min(sum(1 for kw in soft_kw if kw in text_lower) * 2, 5)
-
-    return scores
-
-def generate_detailed_feedback(competency_scores):
+def build_feedback_from_ai(ai_json):
+    """Convert AI JSON evaluation into the feedback dict used by the UI."""
     feedback = {}
-    for comp, score in competency_scores.items():
+    for comp in COMPETENCIES:
         comp_data = COMPETENCIES[comp]
+        entry = ai_json.get(comp, {})
+        score = max(0, min(5, int(entry.get("score", 2))))
+        comment = entry.get("comment", comp_data["description"])
+        improve = entry.get("improve", comp_data["what_to_improve"])
+        strategies = entry.get("strategies", comp_data["strategies"])
+        if isinstance(strategies, str):
+            strategies = [strategies]
+
         if score >= 4:
-            level = "🟢 Excellent"
-            message = f"Strong performance in {comp}! You demonstrated clear mastery."
+            level_label = "🟢 Excellent"
             needs_improvement = False
         elif score >= 2:
-            level = "🟡 Developing"
-            message = f"You showed some {comp} skills, but there's clear room to grow."
+            level_label = "🟡 Developing"
             needs_improvement = True
         else:
-            level = "🔴 Needs Work"
-            message = f"Your {comp} needs significant attention in this response."
+            level_label = "🔴 Needs Work"
             needs_improvement = True
 
         feedback[comp] = {
-            "level": level,
-            "message": message,
+            "level": level_label,
+            "message": comment,
             "score": score,
             "needs_improvement": needs_improvement,
-            "what_to_improve": comp_data["what_to_improve"] if needs_improvement else None,
-            "strategies": comp_data["strategies"] if needs_improvement else []
+            "what_to_improve": improve if needs_improvement else None,
+            "strategies": strategies if needs_improvement else []
         }
     return feedback
 
@@ -359,43 +356,99 @@ else:
         with st.chat_message("user"):
             st.markdown(f'<span style="color:#ffffff;">{prompt}</span>', unsafe_allow_html=True)
 
-        # Evaluate competencies
-        comp_scores = evaluate_competencies(prompt)
-        for comp, score in comp_scores.items():
-            st.session_state.competencies[comp] = max(st.session_state.competencies[comp], score)
-        st.session_state.total_score = sum(st.session_state.competencies.values())
-        update_level()
+        # ── SINGLE AI CALL: Socratic reply + competency evaluation ──
+        combined_prompt = f"""You are a Socratic English Communication Tutor for the program: {st.session_state.program_selected}.
+Scenario: {st.session_state.current_scenario['title']}
+Description: {st.session_state.current_scenario['scenario']}
 
-        # Generate AI Socratic response
-        system_message = f"""You are a Socratic English Communication Tutor specializing in {st.session_state.program_selected}.
-Current Scenario: {st.session_state.current_scenario['title']}
-Your role:
-1. Ask ONLY 1-2 targeted Socratic questions to deepen the student's thinking
-2. NEVER provide direct answers or solutions
-3. Challenge their assumptions gently but firmly
-4. Keep responses concise (max 3-4 sentences)
-5. Reference the scenario context in your questions
-Goal: Guide the student to discover better negotiation strategies themselves."""
+STUDENT'S LATEST RESPONSE:
+\"\"\"{prompt}\"\"\"
+
+FULL CONVERSATION SO FAR:
+{chr(10).join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages])}
+
+YOUR TASK — respond in TWO parts:
+
+PART 1 — SOCRATIC FOLLOW-UP (plain text, 2-3 sentences max):
+Ask 1-2 targeted Socratic questions based specifically on what the student just said.
+Challenge their reasoning. Never give direct answers. Reference the scenario.
+
+PART 2 — COMPETENCY EVALUATION (JSON only, no extra text):
+Evaluate the student's LATEST response across these 5 competencies.
+Be specific — reference actual words or phrases they used.
+Return ONLY valid JSON in this exact format:
+
+```json
+{{
+  "English Language": {{
+    "score": <1-5>,
+    "comment": "<specific observation about their grammar, vocabulary, sentence structure>",
+    "improve": "<one concrete thing to improve based on what they actually wrote>",
+    "strategies": ["<actionable tip 1>", "<actionable tip 2>"]
+  }},
+  "Citizenship": {{
+    "score": <1-5>,
+    "comment": "<specific observation about ethical reasoning or collective thinking in their response>",
+    "improve": "<one concrete improvement based on what they wrote>",
+    "strategies": ["<actionable tip 1>", "<actionable tip 2>"]
+  }},
+  "Intercultural": {{
+    "score": <1-5>,
+    "comment": "<specific observation about cultural awareness shown or missing in their response>",
+    "improve": "<one concrete improvement>",
+    "strategies": ["<actionable tip 1>", "<actionable tip 2>"]
+  }},
+  "Negotiation": {{
+    "score": <1-5>,
+    "comment": "<specific observation about their negotiation approach, proposals, or listening shown>",
+    "improve": "<one concrete improvement>",
+    "strategies": ["<actionable tip 1>", "<actionable tip 2>"]
+  }},
+  "Soft Skills": {{
+    "score": <1-5>,
+    "comment": "<specific observation about tone, empathy, assertiveness, or emotional intelligence>",
+    "improve": "<one concrete improvement>",
+    "strategies": ["<actionable tip 1>", "<actionable tip 2>"]
+  }}
+}}
+```"""
 
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            full_prompt = system_message + "\n\nConversation:\n" + "\n".join(
-                [f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages]
-            )
-            response = model.generate_content(full_prompt)
-            ai_reply = response.text
+            response = model.generate_content(combined_prompt)
+            raw_text = response.text
+
+            # Parse the two parts
+            ai_reply, feedback_json = parse_ai_response(raw_text)
 
             with st.chat_message("assistant"):
                 st.markdown(f'<span style="color:#ffffff;">{ai_reply}</span>', unsafe_allow_html=True)
 
             st.session_state.messages.append({"role": "assistant", "content": ai_reply})
 
+            # Build feedback from AI evaluation
+            if feedback_json:
+                detailed_feedback = build_feedback_from_ai(feedback_json)
+                # Update competency scores from AI
+                for comp, fb in detailed_feedback.items():
+                    st.session_state.competencies[comp] = max(st.session_state.competencies[comp], fb["score"])
+            else:
+                # Fallback: basic feedback if JSON parsing failed
+                detailed_feedback = {comp: {
+                    "level": "🟡 Developing",
+                    "message": "Keep practicing — your response showed effort.",
+                    "score": 2,
+                    "needs_improvement": True,
+                    "what_to_improve": COMPETENCIES[comp]["what_to_improve"],
+                    "strategies": COMPETENCIES[comp]["strategies"]
+                } for comp in COMPETENCIES}
+
+            st.session_state.total_score = sum(st.session_state.competencies.values())
+            update_level()
+            st.session_state.last_feedback = detailed_feedback
+            st.session_state.last_motivational = get_motivational_message(st.session_state.level)
+
         except Exception as e:
             st.error(f"⚠️ API Error: {e}")
-            ai_reply = "Error generating response."
-
-        # Save feedback to session_state so it persists after rerun
-        st.session_state.last_feedback = generate_detailed_feedback(comp_scores)
-        st.session_state.last_motivational = get_motivational_message(st.session_state.level)
 
         st.rerun()
