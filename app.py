@@ -1,42 +1,124 @@
-import streamlit as st
-import google.generativeai as genai
-import random
+import os
 import json
+import random
 import re
+from typing import Any, Dict, List, Optional, Tuple
+
+import streamlit as st
+from google import genai
+from google.genai import types
 
 st.set_page_config(page_title="Copilot | AI Lab", layout="wide")
 
-st.markdown("""
+# -----------------------------------------------------------------------------
+# Visual design
+# -----------------------------------------------------------------------------
+st.markdown(
+    """
     <style>
-    .stApp { background: radial-gradient(circle, #1a1a1a 0%, #050505 100%); color: #ffffff; }
-    .stButton>button {
-        border-radius: 50px; background-color: #D4FF48 !important; color: #000000 !important;
-        font-weight: bold; border: none; padding: 0.6rem 2.5rem;
-        transition: all 0.3s ease; box-shadow: 0 0 15px rgba(212, 255, 72, 0.3);
+    .stApp {
+        background: radial-gradient(circle, #111111 0%, #050505 100%);
+        color: #ffffff;
     }
-    .stButton>button:hover { box-shadow: 0 0 25px rgba(212, 255, 72, 0.6); transform: scale(1.02); }
+    .stButton > button {
+        border-radius: 999px;
+        background-color: #D4FF48 !important;
+        color: #000000 !important;
+        font-weight: 700;
+        border: 0;
+        padding: 0.6rem 1.4rem;
+        box-shadow: 0 0 12px rgba(212, 255, 72, 0.18);
+        transition: all .2s ease;
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 0 18px rgba(212, 255, 72, 0.28);
+    }
     .metric-card {
-        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 15px; padding: 20px; text-align: center; backdrop-filter: blur(10px);
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 16px;
+        padding: 18px;
+        text-align: center;
+        backdrop-filter: blur(10px);
     }
-    .waveform-container { display: flex; align-items: center; justify-content: center; gap: 4px; height: 150px; }
-    .bar { width: 8px; background: linear-gradient(180deg, #D4FF48 0%, #4a5a1a 100%); border-radius: 4px; animation: pulse 1.2s infinite ease-in-out; }
-    @keyframes pulse { 0%, 100% { height: 20px; } 50% { height: 80px; } }
-    .program-badge { background: #D4FF48; color: #000000; padding: 8px 16px; border-radius: 20px; font-weight: bold; display: inline-block; margin-bottom: 20px; }
-    .scenario-box { background: rgba(212,255,72,0.05); border: 2px solid rgba(212,255,72,0.3); border-radius: 10px; padding: 20px; margin-bottom: 20px; color: #ffffff; font-size: 1.1rem; line-height: 1.6; }
-    .feedback-box { background: rgba(212,255,72,0.1); border-left: 4px solid #D4FF48; border-radius: 8px; padding: 15px; margin: 15px 0; color: #D4FF48; font-weight: bold; font-size: 0.95rem; }
-    .competency-report { background: rgba(212,255,72,0.08); border: 1px solid rgba(212,255,72,0.3); border-radius: 10px; padding: 15px; margin: 10px 0; }
-    .competency-bar { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; margin: 5px 0; overflow: hidden; }
-    .competency-fill { height: 100%; background: linear-gradient(90deg, #D4FF48, #a8cc24); border-radius: 4px; }
-    .improvement-box { background: rgba(255,100,100,0.08); border: 1px solid rgba(255,100,100,0.3); border-radius: 10px; padding: 15px; margin: 8px 0; }
-    .strategy-box { background: rgba(100,200,255,0.08); border: 1px solid rgba(100,200,255,0.3); border-radius: 10px; padding: 15px; margin: 8px 0; }
-    .section-title { color: #D4FF48; font-size: 1.1rem; font-weight: bold; margin: 20px 0 10px 0; border-bottom: 1px solid rgba(212,255,72,0.3); padding-bottom: 8px; }
+    .program-badge {
+        background: #D4FF48;
+        color: #000000;
+        padding: 8px 16px;
+        border-radius: 999px;
+        font-weight: 700;
+        display: inline-block;
+        margin-bottom: 12px;
+    }
+    .scenario-box {
+        background: rgba(212,255,72,0.05);
+        border: 1px solid rgba(212,255,72,0.28);
+        border-radius: 14px;
+        padding: 18px;
+        color: #ffffff;
+        font-size: 1.02rem;
+        line-height: 1.6;
+    }
+    .section-title {
+        color: #D4FF48;
+        font-size: 1.02rem;
+        font-weight: 700;
+        margin: 18px 0 10px 0;
+        border-bottom: 1px solid rgba(212,255,72,0.25);
+        padding-bottom: 8px;
+    }
+    .feedback-box {
+        background: rgba(212,255,72,0.08);
+        border-left: 4px solid #D4FF48;
+        border-radius: 10px;
+        padding: 14px;
+        color: #ffffff;
+        margin: 12px 0;
+    }
+    .competency-report {
+        background: rgba(212,255,72,0.06);
+        border: 1px solid rgba(212,255,72,0.20);
+        border-radius: 12px;
+        padding: 14px;
+        margin: 10px 0;
+    }
+    .competency-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(255,255,255,0.10);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 6px;
+    }
+    .competency-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #D4FF48, #a8cc24);
+        border-radius: 999px;
+    }
+    .improvement-box {
+        background: rgba(255,100,100,0.08);
+        border: 1px solid rgba(255,100,100,0.25);
+        border-radius: 12px;
+        padding: 12px;
+        margin: 8px 0;
+    }
+    .strategy-box {
+        background: rgba(100,200,255,0.08);
+        border: 1px solid rgba(100,200,255,0.25);
+        border-radius: 12px;
+        padding: 12px;
+        margin: 8px 0;
+    }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-# ── DATA ──────────────────────────────────────────────────────────────────────
-
-SCENARIOS = {
+# -----------------------------------------------------------------------------
+# Scenario bank: preserved structure and wording from the original file
+# -----------------------------------------------------------------------------
+SCENARIOS: Dict[str, List[Dict[str, str]]] = {
     "Campus Life (Foundation)": [
         {"title": "Conflict Resolution - Study Group", "scenario": "You're in a study group project. Your partner hasn't contributed anything in 2 weeks, and the presentation is in 3 days. When you bring it up, they get defensive and blame their other courses. How do you negotiate a fair resolution while keeping the relationship intact?"},
         {"title": "Accommodation Disagreement", "scenario": "You share an apartment with 3 roommates. One roommate constantly uses shared kitchen items without replacing them, creating tension. You need to address this without escalating the conflict. What's your approach?"},
@@ -64,24 +146,134 @@ SCENARIOS = {
 }
 
 COMPETENCIES = {
-    "English Language": {"icon": "🇬🇧", "fallback_improve": "Use more varied vocabulary and complex sentence structures.", "fallback_strategies": ["Use connectors: however, therefore, consequently", "Record yourself and review for grammar errors"]},
-    "Citizenship":      {"icon": "🏛️", "fallback_improve": "Consider the collective impact and demonstrate ethical reasoning.", "fallback_strategies": ["Use inclusive language: 'we', 'our team'", "Reference shared values in your arguments"]},
-    "Intercultural":    {"icon": "🌍", "fallback_improve": "Show deeper awareness of cultural differences.", "fallback_strategies": ["Acknowledge cultural perspectives explicitly", "Ask clarifying questions about preferences"]},
-    "Negotiation":      {"icon": "🤝", "fallback_improve": "Propose concrete solutions and seek common ground.", "fallback_strategies": ["Use BATNA: identify your best alternative", "Ask open-ended questions: 'What would work best for you?'"]},
-    "Soft Skills":      {"icon": "💼", "fallback_improve": "Demonstrate empathy and assertive communication.", "fallback_strategies": ["Use 'I' statements: 'I feel...', 'I believe...'", "Acknowledge emotions: 'I understand this is frustrating...'"]}
+    "English Language": {
+        "icon": "🇬🇧",
+        "fallback_improve": "Use more varied vocabulary and more precise sentence structures.",
+        "fallback_strategies": ["Use connectors: however, therefore, consequently", "Rewrite one sentence with stronger grammar and clearer wording"]
+    },
+    "Citizenship": {
+        "icon": "🏛️",
+        "fallback_improve": "Consider fairness, respect, and the collective impact of your decision.",
+        "fallback_strategies": ["Use inclusive language such as 'we' and 'our team'", "Mention ethical consequences before deciding"]
+    },
+    "Intercultural": {
+        "icon": "🌍",
+        "fallback_improve": "Show a more explicit awareness of cultural differences and perspectives.",
+        "fallback_strategies": ["Acknowledge alternative cultural expectations", "Use a clarifying question before judging the situation"]
+    },
+    "Negotiation": {
+        "icon": "🤝",
+        "fallback_improve": "Propose a concrete solution and seek common ground.",
+        "fallback_strategies": ["Offer at least two options", "Ask what would be acceptable for all parties"]
+    },
+    "Soft Skills": {
+        "icon": "💼",
+        "fallback_improve": "Demonstrate empathy, assertiveness, and calm tone.",
+        "fallback_strategies": ["Use 'I' statements", "Acknowledge the other person's viewpoint before disagreeing"]
+    }
 }
 
 LEVELS = [
-    (4.5, "Master Negotiator", "🏆 Outstanding, Master Negotiator! You're at the pinnacle of your game!"),
-    (3.8, "Global Communicator", "🌍 Excellent, Global Communicator! You're bridging cultures effectively."),
-    (3.0, "Strategist", "🎯 Impressive, Strategist! You're thinking several steps ahead."),
-    (2.0, "Negotiator", "💪 Well done, Negotiator! Your communication skills are growing stronger."),
-    (0.0, "Explorer", "🌟 Great start, Explorer! Every expert was once a beginner. Keep pushing!")
+    (4.5, "Master Negotiator", "Outstanding performance."),
+    (3.8, "Global Communicator", "Very strong performance."),
+    (3.0, "Strategist", "Solid performance with room to refine."),
+    (2.0, "Negotiator", "Developing performance."),
+    (0.0, "Explorer", "Beginning stage.")
 ]
 
-# ── SESSION STATE ─────────────────────────────────────────────────────────────
+SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "follow_up_questions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 2,
+            "description": "One or two Socratic follow-up questions in English."
+        },
+        "overall_summary": {"type": "string"},
+        "dimensions": {
+            "type": "object",
+            "properties": {
+                "English Language": {
+                    "type": "object",
+                    "properties": {
+                        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "evidence": {"type": "string"},
+                        "strengths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+                        "improve": {"type": "string"},
+                        "rewrite_example": {"type": "string"},
+                        "strategies": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3}
+                    },
+                    "required": ["score", "evidence", "strengths", "improve", "rewrite_example", "strategies"],
+                    "additionalProperties": False
+                },
+                "Citizenship": {
+                    "type": "object",
+                    "properties": {
+                        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "evidence": {"type": "string"},
+                        "strengths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+                        "improve": {"type": "string"},
+                        "rewrite_example": {"type": "string"},
+                        "strategies": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3}
+                    },
+                    "required": ["score", "evidence", "strengths", "improve", "rewrite_example", "strategies"],
+                    "additionalProperties": False
+                },
+                "Intercultural": {
+                    "type": "object",
+                    "properties": {
+                        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "evidence": {"type": "string"},
+                        "strengths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+                        "improve": {"type": "string"},
+                        "rewrite_example": {"type": "string"},
+                        "strategies": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3}
+                    },
+                    "required": ["score", "evidence", "strengths", "improve", "rewrite_example", "strategies"],
+                    "additionalProperties": False
+                },
+                "Negotiation": {
+                    "type": "object",
+                    "properties": {
+                        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "evidence": {"type": "string"},
+                        "strengths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+                        "improve": {"type": "string"},
+                        "rewrite_example": {"type": "string"},
+                        "strategies": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3}
+                    },
+                    "required": ["score", "evidence", "strengths", "improve", "rewrite_example", "strategies"],
+                    "additionalProperties": False
+                },
+                "Soft Skills": {
+                    "type": "object",
+                    "properties": {
+                        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "evidence": {"type": "string"},
+                        "strengths": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 2},
+                        "improve": {"type": "string"},
+                        "rewrite_example": {"type": "string"},
+                        "strategies": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3}
+                    },
+                    "required": ["score", "evidence", "strengths", "improve", "rewrite_example", "strategies"],
+                    "additionalProperties": False
+                },
+            },
+            "required": ["English Language", "Citizenship", "Intercultural", "Negotiation", "Soft Skills"],
+            "additionalProperties": False
+        },
+        "ethical_note": {"type": "string"}
+    },
+    "required": ["follow_up_questions", "overall_summary", "dimensions", "ethical_note"],
+    "additionalProperties": False
+}
 
-def init_state():
+# -----------------------------------------------------------------------------
+# Session state
+# -----------------------------------------------------------------------------
+def init_state() -> None:
     defaults = {
         "messages": [],
         "competencies": {c: 0 for c in COMPETENCIES},
@@ -91,10 +283,11 @@ def init_state():
         "current_scenario": None,
         "total_score": 0,
         "response_count": 0,
-        # KEY: feedback stored here persists across reruns
-        "pending_feedback": None,   # dict with full AI feedback
-        "pending_motivational": None,
-        "show_feedback": False,     # flag: True = render feedback section
+        "pending_feedback": None,
+        "pending_followup": None,
+        "pending_summary": None,
+        "pending_ethical_note": None,
+        "show_feedback": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -102,21 +295,22 @@ def init_state():
 
 init_state()
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
-
-def get_level_info(avg):
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def get_level_info(avg: float) -> Tuple[str, str]:
     for threshold, name, msg in LEVELS:
         if avg >= threshold:
             return name, msg
-    return "Explorer", LEVELS[-1][2]
+    return "Explorer", LEVELS[-1][1]
 
-def update_level():
+def update_level() -> str:
     avg = sum(st.session_state.competencies.values()) / len(st.session_state.competencies)
-    name, msg = get_level_info(avg)
-    st.session_state.level = name
+    level_name, msg = get_level_info(avg)
+    st.session_state.level = level_name
     return msg
 
-def start_mission(program):
+def start_mission(program: str) -> None:
     st.session_state.program_selected = program
     st.session_state.mission_started = True
     st.session_state.current_scenario = random.choice(SCENARIOS[program])
@@ -125,292 +319,365 @@ def start_mission(program):
     st.session_state.total_score = 0
     st.session_state.response_count = 0
     st.session_state.pending_feedback = None
-    st.session_state.pending_motivational = None
+    st.session_state.pending_followup = None
+    st.session_state.pending_summary = None
+    st.session_state.pending_ethical_note = None
     st.session_state.show_feedback = False
 
-def parse_combined_response(raw):
-    """Extract Socratic text and JSON feedback from a single Gemini response."""
-    socratic = raw.strip()
-    feedback_data = None
-    match = re.search(r'```json\s*([\s\S]*?)\s*```', raw)
+def parse_json_response(raw: str) -> Dict[str, Any]:
+    """Try to parse JSON returned by Gemini. Fallback to extracting the last JSON object."""
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+
+    # extract first top-level JSON object from the response
+    match = re.search(r"\{[\s\S]*\}\s*$", raw)
     if match:
-        socratic = raw[:match.start()].strip()
+        candidate = match.group(0)
         try:
-            feedback_data = json.loads(match.group(1))
+            return json.loads(candidate)
         except Exception:
             pass
-    else:
-        brace = re.search(r'(\{[\s\S]*\})\s*$', raw)
-        if brace:
-            socratic = raw[:brace.start()].strip()
-            try:
-                feedback_data = json.loads(brace.group(1))
-            except Exception:
-                pass
-    return socratic, feedback_data
+    raise ValueError("Model response is not valid JSON")
 
-def build_feedback(ai_json):
-    """Turn AI JSON into structured feedback dict."""
-    result = {}
+def build_system_instruction(program: str, scenario_title: str, scenario_text: str) -> str:
+    return f"""
+You are an EFL Copilot for university students.
+
+Context:
+- Program: {program}
+- Scenario title: {scenario_title}
+- Scenario text: {scenario_text}
+
+Pedagogical role:
+- Mediate, do not replace, the teacher.
+- Force the learner to answer in English.
+- Promote negotiation of meaning, pragmatic appropriateness, intercultural awareness, citizenship, and functional writing.
+- Use the student's actual wording as evidence.
+- Never give a generic response.
+- Never provide the full solution as the main answer.
+- Ask Socratic questions that deepen reasoning.
+
+Output requirements:
+- Return strictly one JSON object.
+- Must follow the provided schema.
+- Every criterion must include evidence taken from the student's response.
+- If the response mixes Spanish and English, say so explicitly in the feedback and request a full English reformulation.
+- The rewrite_example must be natural English, specific to the student's answer, and shorter than 120 words.
+- The ethical_note must remind the student that the AI is support, not a substitute for their own work.
+""".strip()
+
+def build_user_prompt(student_response: str, history_text: str) -> str:
+    return f"""
+Evaluate the student's latest response with the highest possible specificity.
+
+Student latest response:
+\"\"\"{student_response}\"\"\"
+
+Conversation history:
+{history_text}
+
+Rules for analysis:
+1. Quote or closely paraphrase at least one fragment from the student's response in each criterion.
+2. Distinguish strengths from weaknesses.
+3. Focus on observable evidence only.
+4. Score each dimension from 1 to 5.
+5. Keep the overall tone constructive and criterial.
+6. Produce 1-2 Socratic follow-up questions.
+7. If the answer is incomplete, mention exactly what is missing.
+8. If the answer is generic, explain why and how to improve it.
+9. If the answer is strong, identify what makes it strong.
+10. The response must be in English except for labels in the JSON keys.
+""".strip()
+
+def get_client() -> genai.Client:
+    api_key = st.secrets.get("GOOGLE_API_KEY", os.getenv("GOOGLE_API_KEY", "")).strip()
+    if not api_key:
+        raise RuntimeError("Missing GOOGLE_API_KEY in Streamlit secrets or environment.")
+    return genai.Client(api_key=api_key)
+
+def call_gemini(student_response: str) -> Dict[str, Any]:
+    client = get_client()
+
+    history_text = "\n".join(
+        [f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages]
+    )
+
+    system_instruction = build_system_instruction(
+        st.session_state.program_selected,
+        st.session_state.current_scenario["title"],
+        st.session_state.current_scenario["scenario"],
+    )
+    user_prompt = build_user_prompt(student_response, history_text)
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.2,
+            response_mime_type="application/json",
+            response_json_schema=SCHEMA,
+        ),
+    )
+    return parse_json_response(response.text)
+
+def build_feedback(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    result: Dict[str, Dict[str, Any]] = {}
+    dimensions = payload.get("dimensions", {})
     for comp, meta in COMPETENCIES.items():
-        entry = ai_json.get(comp, {}) if ai_json else {}
-        score = max(1, min(5, int(entry.get("score", 2))))
-        comment = entry.get("comment", "No specific comment available.")
-        improve = entry.get("improve", meta["fallback_improve"])
+        entry = dimensions.get(comp, {})
+        score = int(entry.get("score", 2))
+        score = max(1, min(5, score))
         strategies = entry.get("strategies", meta["fallback_strategies"])
         if isinstance(strategies, str):
             strategies = [strategies]
-        if score >= 4:
-            badge = "🟢 Excellent"
-            needs = False
-        elif score >= 2:
-            badge = "🟡 Developing"
-            needs = True
-        else:
-            badge = "🔴 Needs Work"
-            needs = True
         result[comp] = {
-            "score": score, "badge": badge, "comment": comment,
-            "needs": needs, "improve": improve, "strategies": strategies
+            "score": score,
+            "evidence": entry.get("evidence", ""),
+            "strengths": entry.get("strengths", []),
+            "improve": entry.get("improve", meta["fallback_improve"]),
+            "rewrite_example": entry.get("rewrite_example", ""),
+            "strategies": strategies or meta["fallback_strategies"],
+            "badge": "🟢 Excellent" if score >= 4 else ("🟡 Developing" if score >= 2 else "🔴 Needs work"),
+            "needs": score < 4,
         }
     return result
 
-def render_feedback_section():
-    """Render the full competency feedback block — called every cycle when show_feedback=True."""
+def render_feedback() -> None:
     fb = st.session_state.pending_feedback
-    mot = st.session_state.pending_motivational
     if not fb:
         return
 
-    st.markdown("<div class='section-title'>📊 Feedback on Your Last Response</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Feedback on the last response</div>", unsafe_allow_html=True)
+
+    if st.session_state.pending_summary:
+        st.markdown(f"<div class='feedback-box'><strong>Overall:</strong> {st.session_state.pending_summary}</div>", unsafe_allow_html=True)
 
     for comp, data in fb.items():
         icon = COMPETENCIES[comp]["icon"]
         pct = int((data["score"] / 5) * 100)
-        st.markdown(f"""
-        <div class="competency-report">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:1rem;">{icon} <strong style="color:#D4FF48;">{comp}</strong></span>
-                <span style="font-size:0.85rem; color:#ccc;">{data['badge']} &nbsp; Score: {data['score']}/5</span>
+        strengths_html = "".join([f"<li>{s}</li>" for s in data.get("strengths", [])])
+
+        st.markdown(
+            f"""
+            <div class="competency-report">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                    <div style="font-size:1rem;"><strong>{icon} {comp}</strong></div>
+                    <div style="font-size:0.85rem; color:#ccc;">{data['badge']} | Score: {data['score']}/5</div>
+                </div>
+                <div class="competency-bar"><div class="competency-fill" style="width:{pct}%;"></div></div>
+                <div style="margin-top:10px; color:#ffffff;"><strong>Evidence:</strong> {data['evidence']}</div>
+                <div style="margin-top:8px; color:#ffffff;"><strong>Strengths:</strong><ul>{strengths_html}</ul></div>
             </div>
-            <div class="competency-bar"><div class="competency-fill" style="width:{pct}%;"></div></div>
-            <p style="margin:8px 0 4px 0; font-size:0.9rem; color:#ffffff;">{data['comment']}</p>
-        </div>
-        """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
 
         if data["needs"]:
-            strategies_html = "".join([f"<li style='margin:4px 0;'>{s}</li>" for s in data["strategies"]])
-            st.markdown(f"""
-            <div class="improvement-box">
-                <strong style="color:#ff9999;">🎯 What to improve:</strong>
-                <p style="color:#ffcccc; margin:6px 0 0 0; font-size:0.9rem;">{data['improve']}</p>
-            </div>
-            <div class="strategy-box">
-                <strong style="color:#99ccff;">💡 Strategies:</strong>
-                <ul style="color:#cce5ff; margin:6px 0 0 0; font-size:0.9rem; padding-left:18px;">
-                    {strategies_html}
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            strategies_html = "".join([f"<li>{s}</li>" for s in data["strategies"]])
+            st.markdown(
+                f"""
+                <div class="improvement-box">
+                    <strong>What to improve:</strong>
+                    <div style="margin-top:6px;">{data['improve']}</div>
+                </div>
+                <div class="strategy-box">
+                    <strong>Strategies:</strong>
+                    <ul style="margin-top:6px;">{strategies_html}</ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if data.get("rewrite_example"):
+                st.markdown(
+                    f"<div class='feedback-box'><strong>English reformulation:</strong> {data['rewrite_example']}</div>",
+                    unsafe_allow_html=True,
+                )
 
-    if mot:
-        st.markdown(f'<div class="feedback-box">{mot}</div>', unsafe_allow_html=True)
+    if st.session_state.pending_ethical_note:
+        st.markdown(
+            f"<div class='feedback-box'><strong>Ethical note:</strong> {st.session_state.pending_ethical_note}</div>",
+            unsafe_allow_html=True,
+        )
 
-# ── SIDEBAR ───────────────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Sidebar
+# -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("<h3 style='color:#D4FF48;'>⚙️ NAVIGATION</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#D4FF48;'>Navigation</h3>", unsafe_allow_html=True)
     st.markdown("---")
+
     if st.session_state.mission_started:
         st.markdown(f"**Program:** {st.session_state.program_selected}")
         st.markdown("---")
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🔄 New Scenario"):
+            if st.button("New Scenario"):
                 st.session_state.current_scenario = random.choice(SCENARIOS[st.session_state.program_selected])
                 st.session_state.messages = []
                 st.session_state.pending_feedback = None
+                st.session_state.pending_followup = None
+                st.session_state.pending_summary = None
+                st.session_state.pending_ethical_note = None
                 st.session_state.show_feedback = False
                 st.rerun()
         with c2:
-            if st.button("← Programs"):
+            if st.button("Programs"):
                 st.session_state.mission_started = False
                 st.session_state.program_selected = None
                 st.rerun()
+
         st.markdown("---")
         st.metric("Responses", st.session_state.response_count)
         st.metric("Level", st.session_state.level)
-        st.metric("Score", st.session_state.total_score)
+        st.metric("Total score", st.session_state.total_score)
+
+        with st.expander("Quality criteria", expanded=False):
+            for comp, meta in COMPETENCIES.items():
+                st.write(f"{meta['icon']} {comp}")
     else:
-        st.info("👈 Select a program to start!")
+        st.info("Select a program to start.")
     st.markdown("---")
-    st.markdown("<small style='color:#aaa;'>Copilot © 2024</small>", unsafe_allow_html=True)
+    st.caption("Streamlit + Google AI Studio (Gemini API)")
 
-# ── NAVBAR ────────────────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Home
+# -----------------------------------------------------------------------------
 col_nav1, col_nav2 = st.columns([8, 2])
 with col_nav1:
-    st.markdown("<h2 style='color:#D4FF48; margin:0; font-weight:bold; letter-spacing:2px;'>COPILOT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#D4FF48; margin:0;'>COPILOT</h2>", unsafe_allow_html=True)
 with col_nav2:
     st.button("Login", key="login_btn")
 
-# ── HOME ──────────────────────────────────────────────────────────────────────
-
 if not st.session_state.mission_started:
     col1, col2 = st.columns([1.2, 1])
+
     with col1:
-        st.markdown("""
-            <h1 style='font-size:3.5rem; line-height:1.1;'>AI-Driven <br><span style='color:#D4FF48;'>Communication Lab</span></h1>
-            <p style='font-size:1.2rem; color:#aaa; margin-bottom:2rem;'>
-            Empower your professional English through Socratic negotiation.
-            Analyze, justify, and resolve intercultural conflicts in real-time.
+        st.markdown(
+            """
+            <h1 style='font-size:3rem; line-height:1.05;'>
+            AI-Driven<br><span style='color:#D4FF48;'>Communication Lab</span>
+            </h1>
+            <p style='font-size:1.1rem; color:#aaa;'>
+            Solve contextualized English scenarios, justify decisions, and receive criterial feedback.
             </p>
-        """, unsafe_allow_html=True)
-        program = st.selectbox("CHOOSE YOUR PROGRAM:", list(SCENARIOS.keys()), key="program_select")
+            """,
+            unsafe_allow_html=True,
+        )
+        program = st.selectbox("Choose your program", list(SCENARIOS.keys()))
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("START MISSION"):
+            if st.button("Start mission"):
                 start_mission(program)
                 st.rerun()
         with b2:
-            if st.button("LEARN MORE"):
-                st.info("📚 Each program offers 6 unique scenarios to improve your negotiation skills.")
+            if st.button("Learn more"):
+                st.info("Each program contains six scenarios designed for negotiation, ethics, and intercultural communication.")
+
     with col2:
-        st.markdown('<div class="waveform-container">' + ''.join([f'<div class="bar" style="animation-delay:{i*0.1}s"></div>' for i in range(7)]) + '</div>', unsafe_allow_html=True)
-        m1, m2 = st.columns(2)
-        with m1:
-            st.markdown(f'<div class="metric-card">TOTAL SCORE<br><h2 style="color:#D4FF48;">{st.session_state.total_score}</h2></div>', unsafe_allow_html=True)
-        with m2:
-            st.markdown(f'<div class="metric-card">LEVEL<br><h4 style="color:#D4FF48;">{st.session_state.level}</h4></div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="metric-card">
+                <h4 style="color:#D4FF48;">Mission focus</h4>
+                <p>Real-time English response + personalized feedback + metacognitive refinement.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"""
+            <div class="metric-card" style="margin-top:12px;">
+                <div>Total score</div>
+                <h2 style="color:#D4FF48;">{st.session_state.total_score}</h2>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"""
+            <div class="metric-card" style="margin-top:12px;">
+                <div>Level</div>
+                <h4 style="color:#D4FF48;">{st.session_state.level}</h4>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-# ── MISSION ───────────────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Mission mode
+# -----------------------------------------------------------------------------
 else:
-    genai.configure(api_key=st.secrets.get("GOOGLE_API_KEY", ""))
-
     # Header
     hc1, hc2 = st.columns([2, 3])
     with hc1:
-        st.markdown(f'<div class="program-badge">🎯 {st.session_state.program_selected}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="program-badge">{st.session_state.program_selected}</div>', unsafe_allow_html=True)
     with hc2:
-        st.markdown(f'<h3 style="color:#D4FF48;">{st.session_state.current_scenario["title"]}</h3>', unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color:#D4FF48;'>{st.session_state.current_scenario['title']}</h3>", unsafe_allow_html=True)
 
     st.markdown(f'<div class="scenario-box">{st.session_state.current_scenario["scenario"]}</div>', unsafe_allow_html=True)
     st.markdown("---")
 
-    # Stats
     d1, d2, d3 = st.columns(3)
     with d1:
-        st.markdown(f'<div class="metric-card">RESPONSES<br><h2 style="color:#D4FF48;">{st.session_state.response_count}</h2></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card">Responses<br><h2 style="color:#D4FF48;">{st.session_state.response_count}</h2></div>', unsafe_allow_html=True)
     with d2:
-        st.markdown(f'<div class="metric-card">SCORE<br><h2 style="color:#D4FF48;">{st.session_state.total_score}</h2></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card">Score<br><h2 style="color:#D4FF48;">{st.session_state.total_score}</h2></div>', unsafe_allow_html=True)
     with d3:
-        st.markdown(f'<div class="metric-card">LEVEL<br><h4 style="color:#D4FF48;">{st.session_state.level}</h4></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card">Level<br><h4 style="color:#D4FF48;">{st.session_state.level}</h4></div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # ── CHAT HISTORY ──
+    # Chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── FEEDBACK BLOCK (renders AFTER chat, persists across reruns) ──
+    # Feedback block
     if st.session_state.show_feedback and st.session_state.pending_feedback:
         st.markdown("---")
-        render_feedback_section()
+        render_feedback()
         st.markdown("---")
 
-    # ── CHAT INPUT ──
-    if prompt := st.chat_input("Write your response here...", key="chat_input"):
+    # Guidance for the student
+    with st.expander("Instructions", expanded=False):
+        st.write("Answer in English only.")
+        st.write("Resolve the case, justify your decision, and keep a respectful tone.")
+        st.write("The AI will give feedback by criterion, with evidence and a rewrite suggestion.")
 
-        # 1. Add user message and display it immediately
+    # Chat input
+    if prompt := st.chat_input("Write your response here...", key="chat_input"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.response_count += 1
 
-        # 2. Build single combined prompt for Gemini
-        history_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages])
-
-        combined_prompt = f"""You are a Socratic English Communication Tutor for the program: {st.session_state.program_selected}.
-Scenario title: {st.session_state.current_scenario['title']}
-Scenario: {st.session_state.current_scenario['scenario']}
-
-STUDENT'S LATEST RESPONSE:
-\"\"\"{prompt}\"\"\"
-
-CONVERSATION HISTORY:
-{history_text}
-
-YOUR TASK — respond in exactly TWO parts with no extra text between them:
-
-PART 1 — SOCRATIC FOLLOW-UP:
-Write 1-2 Socratic questions (2-3 sentences max) that challenge the student's reasoning based on what they JUST said. Never give direct answers. Be specific to their words.
-
-PART 2 — COMPETENCY EVALUATION:
-Immediately after Part 1, output a JSON block evaluating the student's LATEST response.
-Reference specific words or phrases they actually used. Be honest and constructive.
-
-```json
-{{
-  "English Language": {{
-    "score": <integer 1-5>,
-    "comment": "<specific observation about grammar, vocabulary, sentence structure in their response>",
-    "improve": "<one concrete improvement based on what they wrote>",
-    "strategies": ["<tip 1>", "<tip 2>"]
-  }},
-  "Citizenship": {{
-    "score": <integer 1-5>,
-    "comment": "<specific observation about ethical reasoning or collective thinking>",
-    "improve": "<one concrete improvement>",
-    "strategies": ["<tip 1>", "<tip 2>"]
-  }},
-  "Intercultural": {{
-    "score": <integer 1-5>,
-    "comment": "<specific observation about cultural awareness shown or missing>",
-    "improve": "<one concrete improvement>",
-    "strategies": ["<tip 1>", "<tip 2>"]
-  }},
-  "Negotiation": {{
-    "score": <integer 1-5>,
-    "comment": "<specific observation about negotiation approach, proposals, or listening>",
-    "improve": "<one concrete improvement>",
-    "strategies": ["<tip 1>", "<tip 2>"]
-  }},
-  "Soft Skills": {{
-    "score": <integer 1-5>,
-    "comment": "<specific observation about tone, empathy, assertiveness, or emotional intelligence>",
-    "improve": "<one concrete improvement>",
-    "strategies": ["<tip 1>", "<tip 2>"]
-  }}
-}}
-```"""
-
-        # 3. Call Gemini (single call)
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(combined_prompt)
-            raw = response.text
+            with st.spinner("Analyzing response..."):
+                result = call_gemini(prompt)
 
-            # 4. Parse Socratic reply and JSON feedback
-            socratic_reply, feedback_json = parse_combined_response(raw)
+            socratic = result.get("follow_up_questions", [])
+            summary = result.get("overall_summary", "")
+            ethical_note = result.get("ethical_note", "")
 
-            # 5. Store AI reply in messages
-            st.session_state.messages.append({"role": "assistant", "content": socratic_reply})
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "\n".join([f"- {q}" for q in socratic]) if socratic else "Please answer again in English with more detail."
+            })
 
-            # 6. Build and STORE feedback in session_state
-            feedback_built = build_feedback(feedback_json)
+            feedback_built = build_feedback(result)
             for comp, data in feedback_built.items():
                 st.session_state.competencies[comp] = max(st.session_state.competencies[comp], data["score"])
 
             st.session_state.total_score = sum(st.session_state.competencies.values())
-            motivational = update_level()
-
-            # 7. Save to session_state so it survives rerun
             st.session_state.pending_feedback = feedback_built
-            st.session_state.pending_motivational = motivational
-            st.session_state.show_feedback = True  # ← THIS FLAG makes feedback appear after rerun
+            st.session_state.pending_followup = socratic
+            st.session_state.pending_summary = summary
+            st.session_state.pending_ethical_note = ethical_note
+            st.session_state.show_feedback = True
+            update_level()
 
         except Exception as e:
-            st.error(f"⚠️ API Error: {e}")
+            st.error(f"API error: {e}")
 
-        # 8. Rerun — feedback will now render because show_feedback=True
         st.rerun()
