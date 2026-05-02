@@ -2,7 +2,6 @@ import os
 import json
 import random
 import re
-import math
 from typing import Any, Dict, List, Tuple
 
 import streamlit as st
@@ -666,108 +665,66 @@ def build_feedback(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 # Visualization helpers
 # -----------------------------------------------------------------------------
 def render_scorecard_table(feedback: Dict[str, Dict[str, Any]]) -> None:
-    rows = []
+    st.markdown(
+        "<div style='font-weight:800; font-size:1rem; margin-bottom:10px; color:#D4FF48;'>Competency Scorecard</div>",
+        unsafe_allow_html=True,
+    )
+    h1, h2, h3 = st.columns([2, 1, 3])
+    h1.markdown("<span style='color:#bdbdbd; font-size:0.88rem;'>Skill</span>", unsafe_allow_html=True)
+    h2.markdown("<span style='color:#bdbdbd; font-size:0.88rem;'>Score</span>", unsafe_allow_html=True)
+    h3.markdown("<span style='color:#bdbdbd; font-size:0.88rem;'>Progress</span>", unsafe_allow_html=True)
+    st.divider()
     for comp, meta in COMPETENCIES.items():
         item = feedback.get(comp, {})
         score = int(item.get("score", 0))
-        pct = int(score / 5 * 100)
-        rows.append((meta["icon"], comp, score, pct))
-    html = """
-    <div class="scorecard-wrap">
-      <div style="font-weight:800; font-size:1rem; margin-bottom:12px; color:#D4FF48;">Competency Scorecard</div>
-      <table style="width:100%; border-collapse:collapse;">
-        <thead>
-          <tr style="text-align:left; color:#bdbdbd;">
-            <th style="padding:8px 6px;">Skill</th>
-            <th style="padding:8px 6px;">Score</th>
-            <th style="padding:8px 6px;">Progress</th>
-          </tr>
-        </thead>
-        <tbody>
-    """
-    for icon, comp, score, pct in rows:
-        html += f"""
-          <tr style="border-top:1px solid rgba(255,255,255,0.08);">
-            <td style="padding:10px 6px;">{icon} {comp}</td>
-            <td style="padding:10px 6px;">{score}/5</td>
-            <td style="padding:10px 6px;">
-              <div style="width:100%; height:10px; background:rgba(255,255,255,0.10); border-radius:999px; overflow:hidden;">
-                <div style="width:{pct}%; height:10px; background:linear-gradient(90deg, #D4FF48, #a6c93f); border-radius:999px;"></div>
-              </div>
-            </td>
-          </tr>
-        """
-    html += """
-        </tbody>
-      </table>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([2, 1, 3])
+        c1.markdown(f"{meta['icon']} **{comp}**")
+        c2.markdown(f"**{score}**/5")
+        c3.progress(score / 5)
 
-def radar_svg(scores: List[float], labels: List[str], width: int = 460, height: int = 360) -> str:
-    cx = width / 2
-    cy = height / 2 + 10
-    radius = 120
-    n = len(scores)
-    # polygon points
-    pts = []
-    for i, s in enumerate(scores):
-        angle = -math.pi / 2 + (2 * math.pi * i / n)
-        r = radius * (s / 5)
-        x = cx + r * math.cos(angle)
-        y = cy + r * math.sin(angle)
-        pts.append((x, y))
-    poly_points = " ".join([f"{x:.1f},{y:.1f}" for x, y in pts])
-
-    # axis labels
-    label_elems = []
-    for i, label in enumerate(labels):
-        angle = -math.pi / 2 + (2 * math.pi * i / n)
-        x = cx + (radius + 30) * math.cos(angle)
-        y = cy + (radius + 30) * math.sin(angle)
-        anchor = "middle"
-        if -math.pi / 2 < angle < math.pi / 2:
-            anchor = "start"
-        elif angle > math.pi / 2 or angle < -math.pi / 2:
-            anchor = "end"
-        label_elems.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" fill="#111" font-size="13" text-anchor="{anchor}" font-family="Arial">{label}</text>'
+def render_bar_chart(feedback: Dict[str, Dict[str, Any]]) -> None:
+    try:
+        import plotly.graph_objects as go
+        labels = [f"{COMPETENCIES[c]['icon']} {c}" for c in COMPETENCIES]
+        scores = [float(feedback.get(c, {}).get("score", 0)) for c in COMPETENCIES]
+        colors = ["#D4FF48" if s >= 4 else ("#64c8ff" if s >= 2 else "#ff7878") for s in scores]
+        fig = go.Figure(data=[
+            go.Bar(
+                x=labels,
+                y=scores,
+                marker_color=colors,
+                marker_line_width=0,
+                text=[f"{int(s)}/5" for s in scores],
+                textposition="outside",
+                textfont=dict(color="#ffffff", size=13),
+            )
+        ])
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff", family="Arial"),
+            yaxis=dict(
+                range=[0, 5.8],
+                tickvals=[1, 2, 3, 4, 5],
+                gridcolor="rgba(255,255,255,0.08)",
+                zeroline=False,
+            ),
+            xaxis=dict(
+                tickfont=dict(size=11),
+                tickangle=-15,
+            ),
+            margin=dict(t=30, b=10, l=10, r=10),
+            height=290,
+            showlegend=False,
         )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    except ImportError:
+        import pandas as pd
+        labels = list(COMPETENCIES.keys())
+        scores = [float(feedback.get(c, {}).get("score", 0)) for c in COMPETENCIES]
+        df = pd.DataFrame({"Score": scores}, index=labels)
+        st.bar_chart(df, height=280)
 
-    circles = []
-    for level in [1, 2, 3, 4, 5]:
-        r = radius * (level / 5)
-        circles.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1" />')
-
-    axes = []
-    for i in range(n):
-        angle = -math.pi / 2 + (2 * math.pi * i / n)
-        x = cx + radius * math.cos(angle)
-        y = cy + radius * math.sin(angle)
-        axes.append(f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{x:.1f}" y2="{y:.1f}" stroke="rgba(0,0,0,0.18)" stroke-width="1" />')
-
-    points = "".join([f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="#111"/>' for x, y in pts])
-
-    svg = f"""
-    <svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="background:white; border-radius:16px;">
-      <text x="{cx:.1f}" y="28" text-anchor="middle" font-size="17" font-family="Arial" fill="#111">Competency Scorecard</text>
-      {''.join(circles)}
-      {''.join(axes)}
-      <polygon points="{poly_points}" fill="rgba(212,255,72,0.28)" stroke="#111" stroke-width="2"/>
-      {points}
-      {''.join(label_elems)}
-    </svg>
-    """
-    return svg
-
-def render_radar_chart(feedback: Dict[str, Dict[str, Any]]) -> None:
-    labels = list(COMPETENCIES.keys())
-    scores = [float(feedback.get(label, {}).get("score", 0)) for label in labels]
-    svg = radar_svg(scores, labels)
-    st.markdown(
-        f'<div class="scorecard-wrap">{svg}</div>',
-        unsafe_allow_html=True,
-    )
 
 def render_case_support(program: str) -> None:
     hints = SCENARIO_SUPPORT.get(program, [])
@@ -811,7 +768,7 @@ def render_feedback() -> None:
     with col_left:
         render_scorecard_table(fb)
     with col_right:
-        render_radar_chart(fb)
+        render_bar_chart(fb)
 
     st.markdown("<div class='section-title'>Criterion-by-criterion analysis</div>", unsafe_allow_html=True)
 
