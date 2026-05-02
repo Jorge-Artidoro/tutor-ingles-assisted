@@ -2,8 +2,12 @@ import os
 import json
 import random
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Tuple
 
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -109,6 +113,13 @@ st.markdown(
         border-radius: 12px;
         padding: 12px;
         margin: 8px 0;
+    }
+    .scorecard-box {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 16px;
+        padding: 16px;
+        margin: 10px 0;
     }
     </style>
     """,
@@ -264,9 +275,19 @@ SCHEMA: Dict[str, Any] = {
             "required": ["English Language", "Citizenship", "Intercultural", "Negotiation", "Soft Skills"],
             "additionalProperties": False
         },
+        "metacognition": {
+            "type": "object",
+            "properties": {
+                "thinking_quality": {"type": "string"},
+                "decision_logic": {"type": "string"},
+                "transfer_skill": {"type": "string"}
+            },
+            "required": ["thinking_quality", "decision_logic", "transfer_skill"],
+            "additionalProperties": False
+        },
         "ethical_note": {"type": "string"}
     },
-    "required": ["follow_up_questions", "overall_summary", "dimensions", "ethical_note"],
+    "required": ["follow_up_questions", "overall_summary", "dimensions", "metacognition", "ethical_note"],
     "additionalProperties": False
 }
 
@@ -287,7 +308,9 @@ def init_state() -> None:
         "pending_followup": None,
         "pending_summary": None,
         "pending_ethical_note": None,
+        "pending_metacognition": None,
         "show_feedback": False,
+        "score_history": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -322,7 +345,10 @@ def start_mission(program: str) -> None:
     st.session_state.pending_followup = None
     st.session_state.pending_summary = None
     st.session_state.pending_ethical_note = None
+    st.session_state.pending_metacognition = None
     st.session_state.show_feedback = False
+    st.session_state.score_history = []
+    st.session_state.level = "Explorer"
 
 def parse_json_response(raw: str) -> Dict[str, Any]:
     """Try to parse JSON returned by Gemini. Fallback to extracting the last JSON object."""
@@ -332,7 +358,6 @@ def parse_json_response(raw: str) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # extract first top-level JSON object from the response
     match = re.search(r"\{[\s\S]*\}\s*$", raw)
     if match:
         candidate = match.group(0)
@@ -354,19 +379,68 @@ Context:
 Pedagogical role:
 - Mediate, do not replace, the teacher.
 - Force the learner to answer in English.
+- Prioritize meaning and communicative success over perfect grammar.
+- At B1 level, reward clear main points, simple organization, and understandable language.
+- Penalize only errors that block communication.
 - Promote negotiation of meaning, pragmatic appropriateness, intercultural awareness, citizenship, and functional writing.
 - Use the student's actual wording as evidence.
 - Never give a generic response.
 - Never provide the full solution as the main answer.
 - Ask Socratic questions that deepen reasoning.
 
+Evaluation standards:
+1. Linguistic (CEFR B1 Threshold)
+   - Coherence: links short ideas into a linear sequence.
+   - Lexical range: enough vocabulary for daily and personal topics.
+   - Grammar: reasonable control of predictable structures.
+   - Fluency: understandable even with pauses or simple phrasing.
+
+2. Citizenship / Global Citizenship
+   - Respect others' rights and dignity.
+   - Consider the community or group impact.
+   - Identify bias, unfairness, or prejudice in the conflict.
+
+3. Soft Skills / 21st Century Skills
+   - Critical Thinking: root cause analysis, not only symptoms.
+   - Communication: clear purpose and calm expression.
+   - Collaboration: willingness to compromise and cooperate.
+   - Creativity: non-obvious, constructive solutions.
+
+4. Professional Skills
+   - Professionalism: appropriate register for boss, colleague, or client.
+   - Work ethic: responsibility, integrity, and ownership.
+   - Leadership: organize, delegate, and coordinate fairly when relevant.
+
+5. Negotiation (Harvard Principled Negotiation)
+   - Separate people from the problem.
+   - Focus on interests, not positions.
+   - Generate win-win options.
+   - Use objective criteria when possible.
+
+6. Life & Career Skills
+   - Adaptability: respond well to change or constraints.
+   - Initiative: proactive, self-directed action.
+   - Cross-cultural awareness: respectful diplomacy across cultures.
+
+7. Digital / Media Literacy
+   - Netiquette: respectful and composed behavior in chat or online conflict.
+
+Feedback style:
+- Highlight evidence of 21st century skills explicitly.
+- Reward strong reasoning even when English is simple.
+- If the response mixes Spanish and English, say so explicitly and request a full English reformulation.
+- Use B1 standards: message first, polish second.
+- Example:
+  "Your English is simple, but your compromise shows strong Collaboration and Negotiation."
+
 Output requirements:
 - Return strictly one JSON object.
 - Must follow the provided schema.
 - Every criterion must include evidence taken from the student's response.
-- If the response mixes Spanish and English, say so explicitly in the feedback and request a full English reformulation.
+- If the response is incomplete, mention exactly what is missing.
 - The rewrite_example must be natural English, specific to the student's answer, and shorter than 120 words.
 - The ethical_note must remind the student that the AI is support, not a substitute for their own work.
+- Ask 1-2 Socratic follow-up questions.
 """.strip()
 
 def build_user_prompt(student_response: str, history_text: str) -> str:
@@ -390,6 +464,7 @@ Rules for analysis:
 8. If the answer is generic, explain why and how to improve it.
 9. If the answer is strong, identify what makes it strong.
 10. The response must be in English except for labels in the JSON keys.
+11. For B1, value clarity and communicative success over perfect accuracy.
 """.strip()
 
 def get_client() -> genai.Client:
@@ -446,6 +521,63 @@ def build_feedback(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         }
     return result
 
+def build_radar_chart(competencies: Dict[str, int]):
+    labels = list(competencies.keys())
+    values = list(competencies.values())
+
+    if not labels:
+        return None
+
+    values_closed = values + [values[0]]
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
+    angles_closed = angles + [angles[0]]
+
+    fig = plt.figure(figsize=(7.0, 7.0))
+    ax = plt.subplot(111, polar=True)
+    ax.plot(angles_closed, values_closed, linewidth=2)
+    ax.fill(angles_closed, values_closed, alpha=0.15)
+    ax.set_xticks(angles)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_yticks([1, 2, 3, 4, 5])
+    ax.set_yticklabels(["1", "2", "3", "4", "5"], fontsize=8)
+    ax.set_ylim(0, 5)
+    ax.set_title("Competency Scorecard", pad=20)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    return fig
+
+def render_scorecard() -> None:
+    st.markdown("<div class='section-title'>Scorecard & Progress</div>", unsafe_allow_html=True)
+
+    cols = st.columns([1.2, 1])
+    with cols[0]:
+        st.markdown("<div class='scorecard-box'>", unsafe_allow_html=True)
+        rows = []
+        for comp, score in st.session_state.competencies.items():
+            pct = int((score / 5) * 100)
+            rows.append(
+                {
+                    "Skill": comp,
+                    "Score": f"{score}/5",
+                    "Progress": f"{pct}%",
+                }
+            )
+        st.table(pd.DataFrame(rows))
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with cols[1]:
+        fig = build_radar_chart(st.session_state.competencies)
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    if st.session_state.score_history:
+        with st.expander("Progress over responses", expanded=False):
+            hist_df = pd.DataFrame(st.session_state.score_history)
+            cols_to_show = ["response", "total_score", "level"]
+            skill_cols = list(COMPETENCIES.keys())
+            existing = [c for c in cols_to_show + skill_cols if c in hist_df.columns]
+            st.dataframe(hist_df[existing], use_container_width=True, hide_index=True)
+
 def render_feedback() -> None:
     fb = st.session_state.pending_feedback
     if not fb:
@@ -454,7 +586,10 @@ def render_feedback() -> None:
     st.markdown("<div class='section-title'>Feedback on the last response</div>", unsafe_allow_html=True)
 
     if st.session_state.pending_summary:
-        st.markdown(f"<div class='feedback-box'><strong>Overall:</strong> {st.session_state.pending_summary}</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='feedback-box'><strong>Overall:</strong> {st.session_state.pending_summary}</div>",
+            unsafe_allow_html=True,
+        )
 
     for comp, data in fb.items():
         icon = COMPETENCIES[comp]["icon"]
@@ -497,11 +632,35 @@ def render_feedback() -> None:
                     unsafe_allow_html=True,
                 )
 
+    if st.session_state.pending_metacognition:
+        meta = st.session_state.pending_metacognition
+        st.markdown(
+            f"""
+            <div class='feedback-box'>
+                <strong>Metacognition:</strong><br>
+                <strong>Thinking quality:</strong> {meta.get("thinking_quality", "")}<br>
+                <strong>Decision logic:</strong> {meta.get("decision_logic", "")}<br>
+                <strong>Transfer skill:</strong> {meta.get("transfer_skill", "")}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     if st.session_state.pending_ethical_note:
         st.markdown(
             f"<div class='feedback-box'><strong>Ethical note:</strong> {st.session_state.pending_ethical_note}</div>",
             unsafe_allow_html=True,
         )
+
+def record_progress() -> None:
+    snapshot = {
+        "response": st.session_state.response_count,
+        "total_score": st.session_state.total_score,
+        "level": st.session_state.level,
+    }
+    for comp, score in st.session_state.competencies.items():
+        snapshot[comp] = score
+    st.session_state.score_history.append(snapshot)
 
 # -----------------------------------------------------------------------------
 # Sidebar
@@ -522,6 +681,7 @@ with st.sidebar:
                 st.session_state.pending_followup = None
                 st.session_state.pending_summary = None
                 st.session_state.pending_ethical_note = None
+                st.session_state.pending_metacognition = None
                 st.session_state.show_feedback = False
                 st.rerun()
         with c2:
@@ -610,7 +770,6 @@ if not st.session_state.mission_started:
 # Mission mode
 # -----------------------------------------------------------------------------
 else:
-    # Header
     hc1, hc2 = st.columns([2, 3])
     with hc1:
         st.markdown(f'<div class="program-badge">{st.session_state.program_selected}</div>', unsafe_allow_html=True)
@@ -630,24 +789,25 @@ else:
 
     st.markdown("---")
 
-    # Chat history
+    render_scorecard()
+
+    st.markdown("---")
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Feedback block
     if st.session_state.show_feedback and st.session_state.pending_feedback:
         st.markdown("---")
         render_feedback()
         st.markdown("---")
 
-    # Guidance for the student
     with st.expander("Instructions", expanded=False):
         st.write("Answer in English only.")
         st.write("Resolve the case, justify your decision, and keep a respectful tone.")
         st.write("The AI will give feedback by criterion, with evidence and a rewrite suggestion.")
+        st.write("At B1, clarity and successful meaning matter more than perfect grammar.")
 
-    # Chat input
     if prompt := st.chat_input("Write your response here...", key="chat_input"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.response_count += 1
@@ -659,6 +819,7 @@ else:
             socratic = result.get("follow_up_questions", [])
             summary = result.get("overall_summary", "")
             ethical_note = result.get("ethical_note", "")
+            metacognition = result.get("metacognition", {})
 
             st.session_state.messages.append({
                 "role": "assistant",
@@ -674,8 +835,10 @@ else:
             st.session_state.pending_followup = socratic
             st.session_state.pending_summary = summary
             st.session_state.pending_ethical_note = ethical_note
+            st.session_state.pending_metacognition = metacognition
             st.session_state.show_feedback = True
             update_level()
+            record_progress()
 
         except Exception as e:
             st.error(f"API error: {e}")
