@@ -682,48 +682,6 @@ def render_scorecard_table(feedback: Dict[str, Dict[str, Any]]) -> None:
         c2.markdown(f"**{score}**/5")
         c3.progress(score / 5)
 
-def render_bar_chart(feedback: Dict[str, Dict[str, Any]]) -> None:
-    try:
-        import plotly.graph_objects as go
-        labels = [f"{COMPETENCIES[c]['icon']} {c}" for c in COMPETENCIES]
-        scores = [float(feedback.get(c, {}).get("score", 0)) for c in COMPETENCIES]
-        colors = ["#D4FF48" if s >= 4 else ("#64c8ff" if s >= 2 else "#ff7878") for s in scores]
-        fig = go.Figure(data=[
-            go.Bar(
-                x=labels,
-                y=scores,
-                marker_color=colors,
-                marker_line_width=0,
-                text=[f"{int(s)}/5" for s in scores],
-                textposition="outside",
-                textfont=dict(color="#ffffff", size=13),
-            )
-        ])
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", family="Arial"),
-            yaxis=dict(
-                range=[0, 5.8],
-                tickvals=[1, 2, 3, 4, 5],
-                gridcolor="rgba(255,255,255,0.08)",
-                zeroline=False,
-            ),
-            xaxis=dict(
-                tickfont=dict(size=11),
-                tickangle=-15,
-            ),
-            margin=dict(t=30, b=10, l=10, r=10),
-            height=290,
-            showlegend=False,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    except ImportError:
-        import pandas as pd
-        labels = list(COMPETENCIES.keys())
-        scores = [float(feedback.get(c, {}).get("score", 0)) for c in COMPETENCIES]
-        df = pd.DataFrame({"Score": scores}, index=labels)
-        st.bar_chart(df, height=280)
 
 
 def render_case_support(program: str) -> None:
@@ -764,11 +722,7 @@ def render_feedback() -> None:
             unsafe_allow_html=True,
         )
 
-    col_left, col_right = st.columns([1.1, 1])
-    with col_left:
-        render_scorecard_table(fb)
-    with col_right:
-        render_bar_chart(fb)
+    render_scorecard_table(fb)
 
     st.markdown("<div class='section-title'>Criterion-by-criterion analysis</div>", unsafe_allow_html=True)
 
